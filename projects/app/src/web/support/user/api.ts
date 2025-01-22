@@ -9,12 +9,16 @@ import type {
   OauthLoginProps,
   PostLoginProps
 } from '@fastgpt/global/support/user/api.d';
-import { GetWXLoginQRResponse } from '@fastgpt/global/support/user/login/api.d';
+import {
+  AccountRegisterBody,
+  GetWXLoginQRResponse
+} from '@fastgpt/global/support/user/login/api.d';
 
 export const sendAuthCode = (data: {
   username: string;
   type: `${UserAuthTypeEnum}`;
   googleToken: string;
+  captcha: string;
 }) => POST(`/proApi/support/user/inform/sendAuthCode`, data);
 
 export const getTokenLogin = () =>
@@ -23,22 +27,22 @@ export const oauthLogin = (params: OauthLoginProps) =>
   POST<ResLogin>('/proApi/support/user/account/login/oauth', params);
 export const postFastLogin = (params: FastLoginProps) =>
   POST<ResLogin>('/proApi/support/user/account/login/fastLogin', params);
+export const ssoLogin = (params: any) => GET<ResLogin>('/proApi/support/user/account/sso', params);
 
 export const postRegister = ({
   username,
   password,
   code,
-  inviterId
-}: {
-  username: string;
-  code: string;
-  password: string;
-  inviterId?: string;
-}) =>
+  inviterId,
+  bd_vid,
+  fastgpt_sem
+}: AccountRegisterBody) =>
   POST<ResLogin>(`/proApi/support/user/account/register/emailAndPhone`, {
     username,
     code,
     inviterId,
+    bd_vid,
+    fastgpt_sem,
     password: hashStr(password)
   });
 
@@ -63,6 +67,9 @@ export const updatePasswordByOld = ({ oldPsw, newPsw }: { oldPsw: string; newPsw
     newPsw: hashStr(newPsw)
   });
 
+export const updateNotificationAccount = (data: { account: string; verifyCode: string }) =>
+  PUT('/proApi/support/user/team/updateNotificationAccount', data);
+
 export const postLogin = ({ password, ...props }: PostLoginProps) =>
   POST<ResLogin>('/support/user/account/loginByPassword', {
     ...props,
@@ -78,3 +85,10 @@ export const getWXLoginQR = () =>
 
 export const getWXLoginResult = (code: string) =>
   GET<ResLogin>(`/proApi/support/user/account/login/wx/getResult`, { code });
+
+export const getCaptchaPic = (username: string) =>
+  GET<{
+    captchaImage: string;
+  }>('/proApi/support/user/account/captcha/getImgCaptcha', { username });
+
+export const postSyncMembers = () => POST('/proApi/support/user/team/org/sync');

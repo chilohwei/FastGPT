@@ -1,12 +1,14 @@
-import MyModal from '@/components/MyModal';
-import React, { useEffect } from 'react';
+import MyModal from '@fastgpt/web/components/common/MyModal';
+import React, { useCallback, useEffect, useRef } from 'react';
 import { useTranslation } from 'next-i18next';
-import { Box, ModalBody, ModalFooter } from '@chakra-ui/react';
-import { useQuery } from '@tanstack/react-query';
+import { Box, ModalBody } from '@chakra-ui/react';
 import { checkBalancePayResult } from '@/web/support/wallet/bill/api';
 import { useToast } from '@fastgpt/web/hooks/useToast';
 import { useRouter } from 'next/router';
 import { getErrText } from '@fastgpt/global/common/error/utils';
+import LightTip from '@fastgpt/web/components/common/LightTip';
+import Script from 'next/script';
+import { getWebReqUrl } from '@fastgpt/web/common/system/utils';
 
 export type QRPayProps = {
   readPrice: number;
@@ -14,70 +16,82 @@ export type QRPayProps = {
   billId: string;
 };
 
+const qrCodeSize = 168;
+
 const QRCodePayModal = ({
+  tip,
   readPrice,
   codeUrl,
   billId,
   onSuccess
-}: QRPayProps & { onSuccess?: () => any }) => {
-  const router = useRouter();
+}: QRPayProps & { tip?: string; onSuccess?: () => any }) => {
   const { t } = useTranslation();
   const { toast } = useToast();
-  const dom = document.getElementById('payQRCode');
+  const dom = useRef<HTMLDivElement>(null);
 
-  useEffect(() => {
-    if (dom && window.QRCode) {
-      new window.QRCode(dom, {
+  const drawCode = useCallback(() => {
+    if (dom.current && window.QRCode && !dom.current.innerHTML) {
+      new window.QRCode(dom.current, {
         text: codeUrl,
-        width: 128,
-        height: 128,
+        width: qrCodeSize,
+        height: qrCodeSize,
         colorDark: '#000000',
         colorLight: '#ffffff',
         correctLevel: window.QRCode.CorrectLevel.H
       });
     }
-  }, [dom]);
+  }, [codeUrl]);
 
-  useQuery(
-    [billId],
-    () => {
-      if (!billId) return null;
-      return checkBalancePayResult(billId);
-    },
-    {
-      enabled: !!billId,
-      refetchInterval: 3000,
-      onSuccess: async (res) => {
-        if (!res) return;
-
-        try {
-          await onSuccess?.();
-          toast({
-            title: res,
-            status: 'success'
-          });
-        } catch (error) {
-          toast({
-            title: getErrText(error),
-            status: 'error'
-          });
+  useEffect(() => {
+    let timer: NodeJS.Timeout;
+    const check = async () => {
+      try {
+        const res = await checkBalancePayResult(billId);
+        if (res) {
+          try {
+            await onSuccess?.();
+            toast({
+              title: res,
+              status: 'success'
+            });
+            return;
+          } catch (error) {
+            toast({
+              title: getErrText(error),
+              status: 'error'
+            });
+          }
         }
+      } catch (error) {}
 
-        setTimeout(() => {
-          router.reload();
-        }, 1000);
-      }
-    }
-  );
+      drawCode();
+
+      timer = setTimeout(check, 2000);
+    };
+
+    check();
+
+    return () => clearTimeout(timer);
+  }, [billId, drawCode, onSuccess, toast]);
 
   return (
-    <MyModal isOpen title={t('user.Pay')} iconSrc="/imgs/modal/pay.svg">
-      <ModalBody textAlign={'center'}>
-        <Box mb={3}>请微信扫码支付: {readPrice}元，请勿关闭页面</Box>
-        <Box id={'payQRCode'} display={'inline-block'} h={'128px'}></Box>
-      </ModalBody>
-      <ModalFooter />
-    </MyModal>
+    <>
+      <Script
+        src={getWebReqUrl('/js/qrcode.min.js')}
+        strategy="lazyOnload"
+        onLoad={drawCode}
+      ></Script>
+
+      <MyModal isOpen title={t('common:user.Pay')} iconSrc="/imgs/modal/pay.svg">
+        <ModalBody textAlign={'center'} pb={10} whiteSpace={'pre-wrap'}>
+          {tip && <LightTip text={tip} mb={8} textAlign={'left'} />}
+          <Box ref={dom} id={'payQRCode'} display={'inline-block'} h={`${qrCodeSize}px`}></Box>
+          <Box mt={5} textAlign={'center'}>
+            {t('common:pay.wechat', { price: readPrice })}
+          </Box>
+        </ModalBody>
+      </MyModal>
+    </>
   );
 };
 
